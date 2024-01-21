@@ -653,6 +653,8 @@ exports.getInscribeId = async (req, res) => {
     console.log(payload.data.data.files[0]);
     if (inscribeId == undefined) {
       res.status(500).send(false);
+    } else {
+      res.send(inscribeId);
     }
   } else {
     console.log("inscribe ==> ", inscribeId);
