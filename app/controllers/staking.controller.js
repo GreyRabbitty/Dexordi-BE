@@ -22,9 +22,9 @@ const aStaking = db.aStaking;
 const User = db.user;
 
 const APR = 0.01;
-const BRC_PRICE = 10;
-const ODI_PRICE = 3;
-const A_PRICE = 2;
+const BRC_PRICE = 1;
+const ODI_PRICE = 1;
+const A_PRICE = 1;
 const testVersion = true;
 
 const network = bitcoin.networks.testnet;
@@ -339,7 +339,7 @@ exports.sendBTC = async (req, res) => {
       };
     }),
     toAddress: targetAddress,
-    toAmount: amount,
+    toAmount: amount*1,
     wallet: wallet,
     network: network,
     changeAddress: wallet.address,
@@ -350,17 +350,17 @@ exports.sendBTC = async (req, res) => {
 
   console.log("psbt ==>", psbt);
 
-  // psbt.__CACHE.__UNSAFE_SIGN_NONSEGWIT = false;
-  // const rawTx = psbt.extractTransaction().toHex();
+  psbt.__CACHE.__UNSAFE_SIGN_NONSEGWIT = false;
+  const rawTx = psbt.extractTransaction().toHex();
 
-  // await axios.post(
-  //     `${BLOCK_CYPHER_URL}/txs/push`,
-  //     {
-  //         tx: rawTx
-  //     }
-  // );
+  await axios.post(
+      `${BLOCK_CYPHER_URL}/txs/push`,
+      {
+          tx: rawTx
+      }
+  );
 
-  // return psbt.extractTransaction().getId();
+  res.send(psbt.extractTransaction().getId());
 };
 
 exports.staking = async (req, res) => {
@@ -621,24 +621,12 @@ exports.transferInscribe = (req, res) => {
 
 exports.getInscribeId = async (req, res) => {
   const orderId = req.body.orderId;
-  console.log(" <=====================> ");
-  console.log("orderId ==> ", orderId);
-  let inscribeId = "";
 
-  await delay(10000);
-  const payload = await axios.get(
-    `${OPENAPI_UNISAT_URL}/v2/inscribe/order/${orderId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${OPENAPI_UNISAT_TOKEN}`,
-      },
-    }
-  );
+  const mainFunc = async (orderId) => {
+    console.log(" <=====================> ");
+    console.log("orderId ==> ", orderId);
+    let inscribeId = "";
 
-  inscribeId = payload.data.data.files[0].inscriptionId;
-
-  if (inscribeId == undefined) {
-    console.log(" <=========Again try============> ");
     await delay(10000);
     const payload = await axios.get(
       `${OPENAPI_UNISAT_URL}/v2/inscribe/order/${orderId}`,
@@ -649,18 +637,44 @@ exports.getInscribeId = async (req, res) => {
       }
     );
 
+    console.log('result ==> ', payload.data.data.files[0]);
+
     inscribeId = payload.data.data.files[0].inscriptionId;
-    console.log(payload.data.data.files[0]);
+
     if (inscribeId == undefined) {
-      res.status(500).send(false);
+      return mainFunc(orderId);
     } else {
+      console.log('final inscribeId ==> ', inscribeId);
       res.send(inscribeId);
     }
-  } else {
-    console.log("inscribe ==> ", inscribeId);
-    console.log("Final ==> ", inscribeId);
-    res.send(inscribeId);
-  }
+  };
+
+  mainFunc(orderId);
+
+  // if (inscribeId == undefined) {
+  //   console.log(" <=========Again try============> ");
+  //   await delay(10000);
+  //   const payload = await axios.get(
+  //     `${OPENAPI_UNISAT_URL}/v2/inscribe/order/${orderId}`,
+  //     {
+  //       headers: {
+  //         Authorization: `Bearer ${OPENAPI_UNISAT_TOKEN}`,
+  //       },
+  //     }
+  //   );
+
+  //   inscribeId = payload.data.data.files[0].inscriptionId;
+  //   console.log(payload.data.data.files[0]);
+  //   if (inscribeId == undefined) {
+  //     res.status(500).send(false);
+  //   } else {
+  //     res.send(inscribeId);
+  //   }
+  // } else {
+  //   console.log("inscribe ==> ", inscribeId);
+  //   console.log("Final ==> ", inscribeId);
+  //   res.send(inscribeId);
+  // }
 };
 
 exports.getUtxoId = async (req, res) => {
@@ -894,24 +908,30 @@ const brcReward = (id, res) => {
       let rewardAmount = 0;
       let tempReward = 0;
 
+      console.log("===============CLAIM REWARD=================");
+
       stakingArr.map((value) => {
-        tempReward += calcReward(
+        tempReward = calcReward(
           BRC_PRICE,
           value.stakingAmount,
           value.claimDate
         );
-        //console.log('tempReward ==> ', tempReward)
+        console.log("tempReward ==> ", tempReward);
         if (tempReward > 0) {
           //console.log("reward is able to claim");
           value.claimDate = new Date();
+          rewardAmount += tempReward;
         }
-        rewardAmount += tempReward;
+        // console.log('rewardAmount ==> ', rewardAmount)
+        // rewardAmount += tempReward;
       });
+
+      
 
       findedInfo[0].save((err, result) => {
         res.send({
-          tokenType: "odi",
-          rewardAmount: rewardAmount,
+          tokenType: "xODI",
+          rewardAmount: tempReward,
         });
 
         return;
@@ -937,7 +957,7 @@ const odiReward = (id, res) => {
       let tempReward = 0;
 
       stakingArr.map((value) => {
-        tempReward += calcReward(
+        tempReward = calcReward(
           ODI_PRICE,
           value.stakingAmount,
           value.claimDate
@@ -946,13 +966,14 @@ const odiReward = (id, res) => {
         if (tempReward > 0) {
           //console.log("reward is able to claim");
           value.claimDate = new Date();
+          rewardAmount += tempReward;
         }
-        rewardAmount += tempReward;
+        
       });
 
       findedInfo[0].save((err, result) => {
         res.send({
-          tokenType: "a",
+          tokenType: "MEME",
           rewardAmount: rewardAmount,
         });
         //console.log('rewardAmount ==> ', rewardAmount);
@@ -980,18 +1001,19 @@ const aReward = (id, res) => {
       let tempReward = 0;
 
       stakingArr.map((value) => {
-        tempReward += calcReward(A_PRICE, value.stakingAmount, value.claimDate);
+        tempReward = calcReward(A_PRICE, value.stakingAmount, value.claimDate);
         //console.log('tempReward ==> ', tempReward)
         if (tempReward > 0) {
           //console.log("reward is able to claim");
           value.claimDate = new Date();
+          rewardAmount += tempReward;
         }
-        rewardAmount += tempReward;
+        
       });
 
       findedInfo[0].save((err, result) => {
         res.send({
-          tokenType: "odi",
+          tokenType: "LIGO",
           rewardAmount: rewardAmount,
         });
         //console.log('rewardAmount ==> ', rewardAmount);
@@ -1019,6 +1041,8 @@ const checkBrcReward = async (id, res) => {
 
       let rewardAmount = 0;
 
+      console.log("===============CHECK=================");
+
       stakingArr.map((value) => {
         rewardAmount += calcReward(
           BRC_PRICE,
@@ -1026,6 +1050,8 @@ const checkBrcReward = async (id, res) => {
           value.claimDate
         );
       });
+
+      // rewardAmount = Math.floor(rewardAmount / 10);
 
       res.send({
         tokenType: "BRC",
@@ -1080,7 +1106,7 @@ const checkAReward = (id, res) => {
       }
 
       const stakingArr = findedInfo[0].stakingArr;
-      console.log('stakingArr ==> ', stakingArr);
+      console.log("stakingArr ==> ", stakingArr);
 
       let rewardAmount = 0;
 
@@ -1116,8 +1142,8 @@ const brcUnstake = (id, res, wallet) => {
 
       const stakingArr = findedInfo[0].stakingArr;
 
-      let rewardAmount = 0;
       let tempReward = 0;
+      let rewardAmount = 0;
       let removeIndex = -1;
 
       stakingArr.map((value, index) => {
@@ -1127,15 +1153,19 @@ const brcUnstake = (id, res, wallet) => {
           value.claimDate,
           value.lockTime
         );
-        //console.log('tempReward ==> ', tempReward)
+
         if (tempReward > 0) {
           removeIndex = index;
           escrowId.push(stakingArr[index].escrowId);
+
+          rewardAmount += tempReward;
           //console.log(` ${index}th is able to unstaking`);
           // value.claimDate = new Date();
         }
-        rewardAmount += tempReward;
       });
+
+      console.log("rewardAmount after calc ==> ", rewardAmount);
+      // rewardAmount = Math.floor(rewardAmount / 10);
 
       //console.log('findedInfo[0].stakingArr.splice =============>')
       // if(removeIndex > -1){
@@ -1146,12 +1176,13 @@ const brcUnstake = (id, res, wallet) => {
       //   }
       // }
 
+      console.log("tempReward before send ==> ", tempReward);
       findedInfo[0].save((err, result) => {
         //console.log('************************** removeIndex ==> ', removeIndex);
         res.send({
           walletAddress: wallet,
           brcId: id,
-          tokenType: "BRC",
+          tokenType: "xODI",
           rewardAmount: rewardAmount,
           escrowId: escrowId,
           removeIndex: removeIndex,
@@ -1196,11 +1227,15 @@ const odiUnstake = (id, res, wallet) => {
         if (tempReward > 0) {
           removeIndex = index;
           escrowId.push(stakingArr[index].escrowId);
+
+          rewardAmount += tempReward;
           //console.log(` ${index}th is able to unstaking`);
           // value.claimDate = new Date();
         }
-        rewardAmount += tempReward;
       });
+
+      console.log("rewardAmount after calc ==> ", rewardAmount);
+      // rewardAmount = Math.floor(rewardAmount / 10);
 
       //console.log('findedInfo[0].stakingArr.splice =============>')
       // if(removeIndex > -1){
@@ -1216,7 +1251,7 @@ const odiUnstake = (id, res, wallet) => {
         res.send({
           walletAddress: wallet,
           brcId: id,
-          tokenType: "ODI",
+          tokenType: "MEME",
           rewardAmount: rewardAmount,
           escrowId: escrowId,
           removeIndex: removeIndex,
@@ -1259,11 +1294,15 @@ const aUnstake = (id, res, wallet) => {
         if (tempReward > 0) {
           removeIndex = index;
           escrowId.push(stakingArr[index].escrowId);
+
+          rewardAmount += tempReward;
           //console.log(` ${index}th is able to unstaking`);
           // value.claimDate = new Date();
         }
-        rewardAmount += tempReward;
       });
+
+      console.log("rewardAmount after calc ==> ", rewardAmount);
+      // rewardAmount = Math.floor(rewardAmount / 10);
 
       //console.log('findedInfo[0].stakingArr.splice =============>')
       // if(removeIndex > -1){
@@ -1279,7 +1318,7 @@ const aUnstake = (id, res, wallet) => {
         res.send({
           walletAddress: wallet,
           brcId: id,
-          tokenType: "A",
+          tokenType: "LIGO",
           rewardAmount: rewardAmount,
           escrowId: escrowId,
           removeIndex: removeIndex,
@@ -1394,7 +1433,10 @@ const calcReward = (price, stakingAmount, claimDate) => {
     //console.log('calcReward is ended ==> ');
     return 0;
   } else {
-    //console.log('calcReward is ended ==> ');
+    console.log(
+      "calcReward is ended ==> ",
+      APR * (stakingAmount * price * period)
+    );
     return APR * (stakingAmount * price * period);
   }
 
