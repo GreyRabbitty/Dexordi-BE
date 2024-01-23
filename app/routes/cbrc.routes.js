@@ -14,4 +14,6 @@ module.exports = function(app) {
   app.post("/api/cbrc/transferInscribe", controller.transferInscribe);
   app.post("/api/cbrc/getInscribeId", controller.getInscribeId);
   app.post("/api/cbrc/getUtxoId", controller.getUtxoId)
+  app.post("/api/cbrc/getAddressInscriptions", controller.getAddressInscriptions)
+  
 };

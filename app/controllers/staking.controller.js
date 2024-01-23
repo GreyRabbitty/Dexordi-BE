@@ -688,6 +688,18 @@ exports.getUtxoId = async (req, res) => {
   res.send(payload.data);
 };
 
+exports.getAddressInscriptions = async(
+  req, res,
+) => {
+  const address = req.body.address;
+  console.log("=============================");
+  console.log("address ==> ", address);
+  const result = await axios.get(`https://api-testnet.unisat.io/wallet-v4/address/inscriptions?address=${address}&cursor=0&size=1`)
+
+  console.log('inscription result ==> ', result.data);
+  res.send(result.data);
+}
+
 //  =============== Assist Functions ================= //
 
 // Staking
@@ -1042,6 +1054,7 @@ const checkBrcReward = async (id, res) => {
       const stakingArr = findedInfo[0].stakingArr;
 
       let rewardAmount = 0;
+      let stakingAmount = 0;
 
       console.log("===============CHECK=================");
 
@@ -1051,6 +1064,10 @@ const checkBrcReward = async (id, res) => {
           value.stakingAmount,
           value.claimDate
         );
+        stakingAmount += calcStakingAmount(
+          value.stakingAmount,
+          value.claimDate
+        )
       });
 
       // rewardAmount = Math.floor(rewardAmount / 10);
@@ -1058,6 +1075,7 @@ const checkBrcReward = async (id, res) => {
       res.send({
         tokenType: "BRC",
         rewardAmount: rewardAmount,
+        stakingAmount: stakingAmount
       });
       return;
     }
@@ -1078,6 +1096,7 @@ const checkOdiReward = (id, res) => {
       const stakingArr = findedInfo[0].stakingArr;
 
       let rewardAmount = 0;
+      let stakingAmount = 0;
 
       stakingArr.map((value) => {
         rewardAmount += calcReward(
@@ -1085,11 +1104,16 @@ const checkOdiReward = (id, res) => {
           value.stakingAmount,
           value.claimDate
         );
+        stakingAmount += calcStakingAmount(
+          value.stakingAmount,
+          value.claimDate
+        )
       });
 
       res.send({
         tokenType: "ODI",
         rewardAmount: rewardAmount,
+        stakingAmount: stakingAmount
       });
       return;
     }
@@ -1111,6 +1135,7 @@ const checkAReward = (id, res) => {
       console.log("stakingArr ==> ", stakingArr);
 
       let rewardAmount = 0;
+      let stakingAmount = 0;
 
       stakingArr.map((value) => {
         rewardAmount += calcReward(
@@ -1118,11 +1143,16 @@ const checkAReward = (id, res) => {
           value.stakingAmount,
           value.claimDate
         );
+        stakingAmount += calcStakingAmount(
+          value.stakingAmount,
+          value.claimDate
+        )
       });
 
       res.send({
         tokenType: "A",
         rewardAmount: rewardAmount,
+        stakingAmount: stakingAmount
       });
       return;
     }
@@ -1446,6 +1476,27 @@ const calcReward = (price, stakingAmount, claimDate) => {
   // return APR * (price * (new Date() - claimDate))
 };
 
+const calcStakingAmount = (stakingAmount, claimDate) => {
+  console.log("calcReward stakingAmount ==> ", stakingAmount);
+  console.log("calcReward claimDate ==> ", claimDate);
+
+  const period = Math.floor((new Date() - claimDate) / 1000 / 3600 / 24);
+  //console.log('period ==> ', period);
+  if (period < 30) {
+    //console.log('calcReward is ended ==> ');
+    return 0;
+  } else {
+    console.log(
+      "calcStakingAmount is ended ==> ",
+      stakingAmount 
+    );
+    return stakingAmount;
+  }
+
+  // return 10 * stakingAmount * price;
+  // return APR * (price * (new Date() - claimDate))
+};
+
 const calcRewardAtUnstaking = (price, stakingAmount, claimDate, lockTime) => {
   const period = Math.floor((new Date() - claimDate) / 1000 / 3600 / 24);
   //console.log('period ==> ', period);
@@ -1549,6 +1600,8 @@ const inscribeCbrc20 = (protocol, data, feeRate, destination) => {
   console.log(" After exec ");
   return execOut.toString();
 };
+
+
 
 //Deep Lake
 // exports.createEscrow = async (req, res) => {
