@@ -249,6 +249,8 @@ exports.sendInscription = async (req, res) => {
   const inscriptionId = req.body.inscriptionId;
   const feeRate = req.body.feeRate;
 
+  console.log("sendInscription ==> ", req.body)
+
   const utxo = await getInscriptionUtxo(inscriptionId);
   if (!utxo) {
     throw new Error("UTXO not found.");
