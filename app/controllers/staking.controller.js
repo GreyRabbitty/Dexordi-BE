@@ -19,6 +19,11 @@ const db = require("../models");
 const brcStaking = db.brcStaking;
 const odiStaking = db.odiStaking;
 const aStaking = db.aStaking;
+const xodiStaking = db.xodiStaking;
+const bordStaking = db.bordStaking;
+const cbrcStaking = db.cbrcStaking;
+
+
 const User = db.user;
 
 const APR = 0.01;
@@ -64,6 +69,7 @@ const isTaprootInput =
 const ecc = require("@bitcoinerlab/secp256k1");
 const { execSync } = require("child_process");
 const { error } = require("console");
+const xODIStaking = require("../models/xodiStaking.model");
 const ECPairFactory = require("ecpair").ECPairFactory;
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -240,7 +246,7 @@ class LocalWallet {
 }
 
 const wallet = new LocalWallet(
-  "cTM4q2RDov58G2GAPhtw4RNDnzj3dGtjYSssUWV3NXD129pmmgru",
+  "cPfH4h3TTryoBA5gmXKBrf3Jkea4mg512fvTwHSwgS4zDGZDZD6h",
   testVersion ? 1 : 0
 );
 
@@ -288,18 +294,18 @@ exports.sendInscription = async (req, res) => {
     enableRBF: false,
   });
 
-  console.log("psbt ==> ", {
-    utxos: inputUtxos,
-    toAddress: targetAddress,
-    toOrdId: inscriptionId,
-    wallet: wallet,
-    network: network,
-    changeAddress: wallet.address,
-    pubkey: wallet.pubkey,
-    feeRate,
-    outputValue: 546,
-    enableRBF: false,
-  });
+  // console.log("psbt ==> ", {
+  //   utxos: inputUtxos,
+  //   toAddress: targetAddress,
+  //   toOrdId: inscriptionId,
+  //   wallet: wallet,
+  //   network: network,
+  //   changeAddress: wallet.address,
+  //   pubkey: wallet.pubkey,
+  //   feeRate,
+  //   outputValue: 546,
+  //   enableRBF: false,
+  // });
   psbt.__CACHE.__UNSAFE_SIGN_NONSEGWIT = false;
   const rawTx = psbt.extractTransaction().toHex();
 
@@ -350,7 +356,7 @@ exports.sendBTC = async (req, res) => {
     enableRBF: false,
   });
 
-  console.log("psbt ==>", psbt);
+  // console.log("psbt ==>", psbt);
 
   psbt.__CACHE.__UNSAFE_SIGN_NONSEGWIT = false;
   const rawTx = psbt.extractTransaction().toHex();
@@ -700,6 +706,154 @@ exports.getAddressInscriptions = async(
   res.send(result.data);
 }
 
+
+// CBRC staking
+
+exports.cbrcStaking = async (req, res) => {
+  const wallet = req.body.wallet;
+  const tokenType = req.body.tokenType;
+  const stakingData = req.body.stakingData;
+  const inscribeID = req.body.inscribeId;
+
+  console.log("cbrcStaking ==> ", req.body)
+
+  let userData = null;
+
+  //check user exist
+  User.find(
+    {
+      wallet: wallet,
+    },
+    (err, findUser) => {
+      if (err) {
+        res.status(500).send({ message: err });
+        return;
+      }
+
+      if (findUser.length == 0) {
+        //console.log('New User');
+        const newUser = new User({
+          wallet: wallet,
+        });
+
+        newUser.save((err, saveUser) => {
+          if (err) {
+            res.status(500).send({ message: err });
+          }
+          userData = saveUser;
+          //console.log("saved");
+          //console.log('User ==> ', userData);
+
+          switch (tokenType) {
+            case "xODI":
+              xODIStakingFunc(userData, stakingData, inscribeID, res);
+              break;
+            case "bord":
+              bordStakingFunc(userData, stakingData, inscribeID, res);
+              break;
+            case "cbrc":
+              cbrcStakingFunc(userData, stakingData, inscribeID, res);
+              break;
+            default:
+              res.status(500).send({ message: "Invalid Token Type" });
+              break;
+          }
+        });
+      } else {
+        //console.log('findUser ==> ', findUser)
+        userData = findUser[0];
+
+        switch (tokenType) {
+          case "xODI":
+            xODIStakingFunc(userData, stakingData, inscribeID, res);
+            break;
+          case "bord":
+            bordStakingFunc(userData, stakingData, inscribeID, res);
+            break;
+          case "cbrc":
+            cbrcStakingFunc(userData, stakingData, inscribeID, res);
+            break;
+          default:
+            res.status(500).send({ message: "Invalid Token Type" });
+            break;
+        }
+      }
+    }
+  );
+};
+
+exports.cbrcCheckPotentialReward = (req, res) => {
+  console.log("cbrc checkPotentialReward ==> ");
+  const wallet = req.body.wallet;
+  const tokenType = req.body.tokenType;
+
+  console.log('wallet ==> ', wallet)
+  console.log('tokenType ==> ', tokenType)
+
+  User.find(
+    {
+      wallet: wallet,
+    },
+    (err, findedUser) => {
+      //console.log('findedUser ==> ', findedUser)
+      if (findedUser.length == 0) {
+        res.status(500).send({ message: "Not Found User" });
+        return;
+      }
+
+      switch (tokenType.toString().toLowerCase()) {
+        case "xodi":
+          checkXodiReward(findedUser[0]._id, res);
+          break;
+        case "bord":
+          checkBordReward(findedUser[0]._id, res);
+          break;
+        case "cbrc":
+          checkCbrcReward(findedUser[0]._id, res);
+          break;
+        default:
+          res.status(500).send({
+            message: "Please input the one among xODI, bord, cbrc token types",
+          });
+      }
+    }
+  );
+};
+
+exports.cbrcClaimReward = (req, res) => {
+  const wallet = req.body.wallet;
+  const tokenType = req.body.tokenType;
+
+  User.find(
+    {
+      wallet: wallet,
+    },
+    (err, findedUser) => {
+      //console.log('findedUser ==> ', findedUser)
+      if (findedUser.length == 0) {
+        res.status(500).send({ message: "Not Found User" });
+        return;
+      }
+
+      switch (tokenType.toString().toLowerCase()) {
+        case "xodi":
+          xodiReward(findedUser[0]._id, res);
+          break;
+        case "bord":
+          bordReward(findedUser[0]._id, res);
+          break;
+        case "cbrc":
+          cbrcReward(findedUser[0]._id, res);
+          break;
+        default:
+          res.status(500).send({
+            message: "Please input the one among xODI, bord, cbrc token types",
+          });
+      }
+    }
+  );
+};
+
 //  =============== Assist Functions ================= //
 
 // Staking
@@ -853,6 +1007,161 @@ const aStakingFunc = (user, stakingData, escrowId, res) => {
   );
 };
 
+// CBRC Staking
+const xODIStakingFunc = (user, stakingData, inscribeId, res) => {
+  console.log('xODIStakingFunc functions is called');
+  console.log('user ==> ', user);
+  console.log('inscribeId ==> ', inscribeId);
+  xodiStaking.find(
+    {
+      owner: user._id,
+    },
+    (err, brc) => {
+      if (err) {
+        res.status(500).send({ message: err });
+        return;
+      }
+
+      if (brc.length == 0) {
+        //console.log('New BRC Staking')
+        // res.send({ message: 'New BRC Staking' })
+        const newXodiStaking = new xodiStaking({
+          owner: user._id,
+          stakingArr: [],
+        });
+
+        newXodiStaking.stakingArr.push({
+          stakingAmount: stakingData.amount,
+          lockTime: stakingData.lockTime,
+          claimDate: stakingData.claimDate,
+          stakeDate: stakingData.stakeDate,
+          inscribeId: inscribeId,
+        });
+
+        newXodiStaking.save((err, savedBrcStaking) => {
+          //console.log('saved BrcStaking ==> ', savedBrcStaking)
+          res.send(savedBrcStaking);
+        });
+      } else {
+        //console.log('Finded Result ==> ', brc[0])
+
+        brc[0].stakingArr.push({
+          stakingAmount: stakingData.amount,
+          lockTime: stakingData.lockTime,
+          claimDate: stakingData.claimDate,
+          stakeDate: stakingData.stakeDate,
+          inscribeId: inscribeId,
+        });
+
+        brc[0].save();
+        res.send(brc[0]);
+      }
+    }
+  );
+};
+
+const bordStakingFunc = (user, stakingData, inscribeId, res) => {
+  //console.log('brcStakingFunc functions is called');
+  //console.log('user ==> ', user);
+  bordStaking.find(
+    {
+      owner: user._id,
+    },
+    (err, brc) => {
+      if (err) {
+        res.status(500).send({ message: err });
+        return;
+      }
+
+      if (brc.length == 0) {
+        //console.log('New BRC Staking')
+        // res.send({ message: 'New BRC Staking' })
+        const newBordStaking = new bordStaking({
+          owner: user._id,
+          stakingArr: [],
+        });
+
+        newBordStaking.stakingArr.push({
+          stakingAmount: stakingData.amount,
+          lockTime: stakingData.lockTime,
+          claimDate: stakingData.claimDate,
+          stakeDate: stakingData.stakeDate,
+          inscribeId: inscribeId,
+        });
+
+        newBordStaking.save((err, savedBrcStaking) => {
+          //console.log('saved BrcStaking ==> ', savedBrcStaking)
+          res.send(savedBrcStaking);
+        });
+      } else {
+        //console.log('Finded Result ==> ', brc[0])
+
+        brc[0].stakingArr.push({
+          stakingAmount: stakingData.amount,
+          lockTime: stakingData.lockTime,
+          claimDate: stakingData.claimDate,
+          stakeDate: stakingData.stakeDate,
+          inscribeId: inscribeId,
+        });
+
+        brc[0].save();
+        res.send(brc[0]);
+      }
+    }
+  );
+};
+
+const cbrcStakingFunc = (user, stakingData, inscribeId, res) => {
+  //console.log('brcStakingFunc functions is called');
+  //console.log('user ==> ', user);
+  cbrcStaking.find(
+    {
+      owner: user._id,
+    },
+    (err, brc) => {
+      if (err) {
+        res.status(500).send({ message: err });
+        return;
+      }
+
+      if (brc.length == 0) {
+        //console.log('New BRC Staking')
+        // res.send({ message: 'New BRC Staking' })
+        const newCbrcStaking = new cbrcStaking({
+          owner: user._id,
+          stakingArr: [],
+        });
+
+        newCbrcStaking.stakingArr.push({
+          stakingAmount: stakingData.amount,
+          lockTime: stakingData.lockTime,
+          claimDate: stakingData.claimDate,
+          stakeDate: stakingData.stakeDate,
+          inscribeId: inscribeId,
+        });
+
+        newCbrcStaking.save((err, savedBrcStaking) => {
+          //console.log('saved BrcStaking ==> ', savedBrcStaking)
+          res.send(savedBrcStaking);
+        });
+      } else {
+        //console.log('Finded Result ==> ', brc[0])
+
+        brc[0].stakingArr.push({
+          stakingAmount: stakingData.amount,
+          lockTime: stakingData.lockTime,
+          claimDate: stakingData.claimDate,
+          stakeDate: stakingData.stakeDate,
+          inscribeId: inscribeId,
+        });
+
+        brc[0].save();
+        res.send(brc[0]);
+      }
+    }
+  );
+};
+
 // GetUserInfo
 const getUserInfoByBrc = (id, res) => {
   //console.log('id  ===>  ', id);
@@ -945,7 +1254,7 @@ const brcReward = (id, res) => {
       findedInfo[0].save((err, result) => {
         res.send({
           tokenType: "xODI",
-          rewardAmount: tempReward,
+          rewardAmount: rewardAmount,
         });
 
         return;
@@ -1038,6 +1347,139 @@ const aReward = (id, res) => {
   );
 };
 
+// CBRC claimReward
+const xodiReward = (id, res) => {
+  xODIStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found Odi Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let rewardAmount = 0;
+      let tempReward = 0;
+
+      console.log("===============CLAIM REWARD=================");
+
+      stakingArr.map((value) => {
+        tempReward = calcReward(
+          BRC_PRICE,
+          value.stakingAmount,
+          value.claimDate
+        );
+        console.log("tempReward ==> ", tempReward);
+        if (tempReward > 0) {
+          //console.log("reward is able to claim");
+          value.claimDate = new Date();
+          rewardAmount += tempReward;
+        }
+        // console.log('rewardAmount ==> ', rewardAmount)
+        // rewardAmount += tempReward;
+      });
+
+      
+
+      findedInfo[0].save((err, result) => {
+        res.send({
+          tokenType: "xODI",
+          rewardAmount: rewardAmount,
+        });
+
+        return;
+      });
+    }
+  );
+};
+
+const bordReward = (id, res) => {
+  bordStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found Odi Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let rewardAmount = 0;
+      let tempReward = 0;
+
+      stakingArr.map((value) => {
+        tempReward = calcReward(
+          ODI_PRICE,
+          value.stakingAmount,
+          value.claimDate
+        );
+        //console.log('tempReward ==> ', tempReward)
+        if (tempReward > 0) {
+          //console.log("reward is able to claim");
+          value.claimDate = new Date();
+          rewardAmount += tempReward;
+        }
+        
+      });
+
+      findedInfo[0].save((err, result) => {
+        res.send({
+          tokenType: "MEME",
+          rewardAmount: rewardAmount,
+        });
+        //console.log('rewardAmount ==> ', rewardAmount);
+        // res.send(result);
+        return;
+      });
+    }
+  );
+};
+
+const cbrcReward = (id, res) => {
+  cbrcStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found A Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let rewardAmount = 0;
+      let tempReward = 0;
+
+      stakingArr.map((value) => {
+        tempReward = calcReward(A_PRICE, value.stakingAmount, value.claimDate);
+        //console.log('tempReward ==> ', tempReward)
+        if (tempReward > 0) {
+          //console.log("reward is able to claim");
+          value.claimDate = new Date();
+          rewardAmount += tempReward;
+        }
+        
+      });
+
+      findedInfo[0].save((err, result) => {
+        res.send({
+          tokenType: "LIGO",
+          rewardAmount: rewardAmount,
+        });
+        //console.log('rewardAmount ==> ', rewardAmount);
+        // res.send(result);
+        return;
+      });
+    }
+  );
+};
+
 // check potential reward
 const checkBrcReward = async (id, res) => {
   console.log("checkBrcReward ==> ");
@@ -1059,15 +1501,20 @@ const checkBrcReward = async (id, res) => {
       console.log("===============CHECK=================");
 
       stakingArr.map((value) => {
-        rewardAmount += calcReward(
+        tempReward = calcReward(
           BRC_PRICE,
           value.stakingAmount,
           value.claimDate
         );
-        stakingAmount += calcStakingAmount(
-          value.stakingAmount,
-          value.claimDate
-        )
+        console.log("tempReward ==> ", tempReward);
+        if (tempReward > 0) {
+          //console.log("reward is able to claim");
+          // value.claimDate = new Date();
+          stakingAmount += value.stakingAmount
+          rewardAmount += tempReward;
+        }
+        // console.log('rewardAmount ==> ', rewardAmount)
+        // rewardAmount += tempReward;
       });
 
       // rewardAmount = Math.floor(rewardAmount / 10);
@@ -1151,6 +1598,132 @@ const checkAReward = (id, res) => {
 
       res.send({
         tokenType: "A",
+        rewardAmount: rewardAmount,
+        stakingAmount: stakingAmount
+      });
+      return;
+    }
+  );
+};
+
+// check CBRC Potential Reward
+const checkXodiReward = async (id, res) => {
+  console.log("checkBrcReward ==> ");
+  xODIStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found BRC Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let rewardAmount = 0;
+      let stakingAmount = 0;
+
+      console.log("===============CHECK=================");
+
+      stakingArr.map((value) => {
+        tempReward = calcReward(
+          BRC_PRICE,
+          value.stakingAmount,
+          value.claimDate
+        );
+        console.log("tempReward ==> ", tempReward);
+        if (tempReward > 0) {
+          //console.log("reward is able to claim");
+          // value.claimDate = new Date();
+          stakingAmount += value.stakingAmount
+          rewardAmount += tempReward;
+        }
+        // console.log('rewardAmount ==> ', rewardAmount)
+        // rewardAmount += tempReward;
+      });
+
+      // rewardAmount = Math.floor(rewardAmount / 10);
+
+      res.send({
+        tokenType: "BORD",
+        rewardAmount: rewardAmount,
+        stakingAmount: stakingAmount
+      });
+      return;
+    }
+  );
+};
+
+const checkBordReward = (id, res) => {
+  bordStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found Odi Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let rewardAmount = 0;
+      let stakingAmount = 0;
+
+      stakingArr.map((value) => {
+        rewardAmount += calcReward(
+          ODI_PRICE,
+          value.stakingAmount,
+          value.claimDate
+        );
+        stakingAmount += calcStakingAmount(
+          value.stakingAmount,
+          value.claimDate
+        )
+      });
+
+      res.send({
+        tokenType: "xODI",
+        rewardAmount: rewardAmount,
+        stakingAmount: stakingAmount
+      });
+      return;
+    }
+  );
+};
+
+const checkCbrcReward = (id, res) => {
+  cbrcStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found A Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+      console.log("stakingArr ==> ", stakingArr);
+
+      let rewardAmount = 0;
+      let stakingAmount = 0;
+
+      stakingArr.map((value) => {
+        rewardAmount += calcReward(
+          A_PRICE,
+          value.stakingAmount,
+          value.claimDate
+        );
+        stakingAmount += calcStakingAmount(
+          value.stakingAmount,
+          value.claimDate
+        )
+      });
+
+      res.send({
+        tokenType: "CBRC",
         rewardAmount: rewardAmount,
         stakingAmount: stakingAmount
       });
@@ -1544,8 +2117,8 @@ const httpGet = async (route, params) => {
 
   // Make the axios request instead of using fetch
 
-  // console.log("httpGet url ==> ", url);
-  // console.log("wallet.address ==> ", wallet.address);
+  console.log("httpGet url ==> ", url);
+  console.log("wallet.address ==> ", wallet.address);
   const response = await axios.get(url, {
     headers: {
       "X-Client": "UniSat Wallet",
@@ -1553,6 +2126,8 @@ const httpGet = async (route, params) => {
       "x-udid": randomstring.generate(12),
     },
   });
+
+  console.log('response.data ==> ', response.data);
 
   return response.data;
 };

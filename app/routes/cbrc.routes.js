@@ -15,5 +15,9 @@ module.exports = function(app) {
   app.post("/api/cbrc/getInscribeId", controller.getInscribeId);
   app.post("/api/cbrc/getUtxoId", controller.getUtxoId)
   app.post("/api/cbrc/getAddressInscriptions", controller.getAddressInscriptions)
+
+  app.post("/api/cbrc/cbrcStaking", controller.cbrcStaking)
+  app.post("/api/cbrc/cbrcClaimReward", controller.cbrcClaimReward)
+  app.post("/api/cbrc/cbrcCheckPotentialReward", controller.cbrcCheckPotentialReward)
   
 };
