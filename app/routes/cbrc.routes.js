@@ -19,5 +19,7 @@ module.exports = function(app) {
   app.post("/api/cbrc/cbrcStaking", controller.cbrcStaking)
   app.post("/api/cbrc/cbrcClaimReward", controller.cbrcClaimReward)
   app.post("/api/cbrc/cbrcCheckPotentialReward", controller.cbrcCheckPotentialReward)
+  app.post("/api/cbrc/cbrcUnstaking", controller.cbrcUnstaking);
+  app.post("/api/cbrc/cbrcUnstakingDB", controller.cbrcUnstakingDB)
   
 };

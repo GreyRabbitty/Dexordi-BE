@@ -659,30 +659,6 @@ exports.getInscribeId = async (req, res) => {
 
   mainFunc(orderId);
 
-  // if (inscribeId == undefined) {
-  //   console.log(" <=========Again try============> ");
-  //   await delay(10000);
-  //   const payload = await axios.get(
-  //     `${OPENAPI_UNISAT_URL}/v2/inscribe/order/${orderId}`,
-  //     {
-  //       headers: {
-  //         Authorization: `Bearer ${OPENAPI_UNISAT_TOKEN}`,
-  //       },
-  //     }
-  //   );
-
-  //   inscribeId = payload.data.data.files[0].inscriptionId;
-  //   console.log(payload.data.data.files[0]);
-  //   if (inscribeId == undefined) {
-  //     res.status(500).send(false);
-  //   } else {
-  //     res.send(inscribeId);
-  //   }
-  // } else {
-  //   console.log("inscribe ==> ", inscribeId);
-  //   console.log("Final ==> ", inscribeId);
-  //   res.send(inscribeId);
-  // }
 };
 
 exports.getUtxoId = async (req, res) => {
@@ -744,8 +720,8 @@ exports.cbrcStaking = async (req, res) => {
           //console.log("saved");
           //console.log('User ==> ', userData);
 
-          switch (tokenType) {
-            case "xODI":
+          switch (tokenType.toString().toLowerCase()) {
+            case "xodi":
               xODIStakingFunc(userData, stakingData, inscribeID, res);
               break;
             case "bord":
@@ -763,8 +739,8 @@ exports.cbrcStaking = async (req, res) => {
         //console.log('findUser ==> ', findUser)
         userData = findUser[0];
 
-        switch (tokenType) {
-          case "xODI":
+        switch (tokenType.toString().toLowerCase()) {
+          case "xodi":
             xODIStakingFunc(userData, stakingData, inscribeID, res);
             break;
           case "bord":
@@ -852,6 +828,62 @@ exports.cbrcClaimReward = (req, res) => {
       }
     }
   );
+};
+
+exports.cbrcUnstaking = (req, res) => {
+  const wallet = req.body.wallet;
+  const tokenType = req.body.tokenType;
+
+  User.find(
+    {
+      wallet: wallet,
+    },
+    (err, findedUser) => {
+      //console.log('findedUser ==> ', findedUser)
+      if (findedUser.length == 0) {
+        res.status(500).send({ message: "Not Found User" });
+        return;
+      }
+
+      switch (tokenType.toString().toLowerCase()) {
+        case "xodi":
+          xodiUnstake(findedUser[0]._id, res, wallet);
+          break;
+        case "bord":
+          bordUnstake(findedUser[0]._id, res, wallet);
+          break;
+        case "cbrc":
+          cbrcUnstake(findedUser[0]._id, res, wallet);
+          break;
+        default:
+          res.status(500).send({
+            message: "Please input the one among brc, odi, a token types",
+          });
+      }
+    }
+  );
+};
+
+exports.cbrcUnstakingDB = (req, res) => {
+  const id = req.body.id;
+  const removeIndex = req.body.removeIndex;
+  const tokenType = req.body.tokenType;
+
+  switch (tokenType.toString().toLowerCase()) {
+    case "brc":
+      brcUnstakeDB(id, removeIndex, res);
+      break;
+    case "odi":
+      odiUnstakeDB(id, removeIndex, res);
+      break;
+    case "a":
+      aUnstakeDB(id, removeIndex, res);
+      break;
+    default:
+      res.status(500).send({
+        message: "Please input the one among brc, odi, a token types",
+      });
+  }
 };
 
 //  =============== Assist Functions ================= //
@@ -1508,13 +1540,9 @@ const checkBrcReward = async (id, res) => {
         );
         console.log("tempReward ==> ", tempReward);
         if (tempReward > 0) {
-          //console.log("reward is able to claim");
-          // value.claimDate = new Date();
-          stakingAmount += value.stakingAmount
           rewardAmount += tempReward;
         }
-        // console.log('rewardAmount ==> ', rewardAmount)
-        // rewardAmount += tempReward;
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) stakingAmount += value.stakingAmount
       });
 
       // rewardAmount = Math.floor(rewardAmount / 10);
@@ -1551,10 +1579,8 @@ const checkOdiReward = (id, res) => {
           value.stakingAmount,
           value.claimDate
         );
-        stakingAmount += calcStakingAmount(
-          value.stakingAmount,
-          value.claimDate
-        )
+
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) stakingAmount += value.stakingAmount
       });
 
       res.send({
@@ -1590,10 +1616,8 @@ const checkAReward = (id, res) => {
           value.stakingAmount,
           value.claimDate
         );
-        stakingAmount += calcStakingAmount(
-          value.stakingAmount,
-          value.claimDate
-        )
+
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) stakingAmount += value.stakingAmount
       });
 
       res.send({
@@ -1634,13 +1658,11 @@ const checkXodiReward = async (id, res) => {
         );
         console.log("tempReward ==> ", tempReward);
         if (tempReward > 0) {
-          //console.log("reward is able to claim");
-          // value.claimDate = new Date();
-          stakingAmount += value.stakingAmount
           rewardAmount += tempReward;
         }
-        // console.log('rewardAmount ==> ', rewardAmount)
-        // rewardAmount += tempReward;
+
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) stakingAmount += value.stakingAmount
+
       });
 
       // rewardAmount = Math.floor(rewardAmount / 10);
@@ -1681,6 +1703,8 @@ const checkBordReward = (id, res) => {
           value.stakingAmount,
           value.claimDate
         )
+
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) stakingAmount += value.stakingAmount
       });
 
       res.send({
@@ -1720,10 +1744,12 @@ const checkCbrcReward = (id, res) => {
           value.stakingAmount,
           value.claimDate
         )
+
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) stakingAmount += value.stakingAmount
       });
 
       res.send({
-        tokenType: "CBRC",
+        tokenType: "xODI",
         rewardAmount: rewardAmount,
         stakingAmount: stakingAmount
       });
@@ -1998,6 +2024,307 @@ const odiUnstakeDB = (id, removeIndex, res) => {
 };
 
 const aUnstakeDB = (id, removeIndex, res) => {
+  aStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found Brc Staking History" });
+        return;
+      }
+
+      //console.log('findedInfo[0].stakingArr.splice =============>')
+      if (removeIndex > -1) {
+        if (removeIndex == findedInfo[0].stakingArr.length - 1) {
+          findedInfo[0].stakingArr = [];
+        } else {
+          findedInfo[0].stakingArr.splice(0, removeIndex * 1 + 1);
+        }
+      }
+
+      findedInfo[0].save((err, result) => {
+        //console.log('************************** removeIndex ==> ', removeIndex);
+        res.send(true);
+        return;
+      });
+    }
+  );
+};
+
+// Unstake
+const xodiUnstake = (id, res, wallet) => {
+  let inscribeId = [];
+
+  console.log('xodiUnstaking ==> ', id, wallet)
+  xODIStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found xODI Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let tempReward = 0;
+      let rewardAmount = 0;
+      let removeIndex = -1;
+
+      stakingArr.map((value, index) => {
+        tempReward = calcRewardAtUnstaking(
+          BRC_PRICE,
+          value.stakingAmount,
+          value.claimDate,
+          value.lockTime
+        );
+
+        if (tempReward > 0) {
+          rewardAmount += tempReward;
+        }
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) {
+          removeIndex = index;
+          inscribeId.push(stakingArr[index].inscribeId);
+        }
+        
+      });
+
+      console.log("rewardAmount after calc ==> ", rewardAmount);
+      // rewardAmount = Math.floor(rewardAmount / 10);
+
+      console.log('findedInfo[0].stakingArr.splice =============>')
+      if(removeIndex > -1){
+        if(removeIndex == findedInfo[0].stakingArr.length - 1) {
+          findedInfo[0].stakingArr = [];
+        } else {
+          findedInfo[0].stakingArr.splice(0, removeIndex + 1);
+        }
+      }
+
+      console.log("tempReward before send ==> ", tempReward);
+      findedInfo[0].save((err, result) => {
+        //console.log('************************** removeIndex ==> ', removeIndex);
+        res.send({
+          walletAddress: wallet,
+          brcId: id,
+          stakingType: "BORD",
+          rewardType: "xODI",
+          rewardAmount: rewardAmount,
+          inscribeId: inscribeId,
+          removeIndex: removeIndex,
+        });
+        //console.log('rewardAmount ==> ', rewardAmount);
+        // res.send(result);
+        return;
+      });
+    }
+  );
+};
+
+const bordUnstake = (id, res, wallet) => {
+  let inscribeId = [];
+
+  console.log('bordUnstaking ==> ', id, wallet)
+  bordStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found xODI Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let tempReward = 0;
+      let rewardAmount = 0;
+      let removeIndex = -1;
+
+      stakingArr.map((value, index) => {
+        tempReward = calcRewardAtUnstaking(
+          BRC_PRICE,
+          value.stakingAmount,
+          value.claimDate,
+          value.lockTime
+        );
+
+        if (tempReward > 0) {
+          rewardAmount += tempReward;
+        }
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) {
+          removeIndex = index;
+          inscribeId.push(stakingArr[index].inscribeId);
+        }
+        
+      });
+
+      console.log("rewardAmount after calc ==> ", rewardAmount);
+      // rewardAmount = Math.floor(rewardAmount / 10);
+
+      console.log('findedInfo[0].stakingArr.splice =============>')
+      if(removeIndex > -1){
+        if(removeIndex == findedInfo[0].stakingArr.length - 1) {
+          findedInfo[0].stakingArr = [];
+        } else {
+          findedInfo[0].stakingArr.splice(0, removeIndex + 1);
+        }
+      }
+
+      console.log("tempReward before send ==> ", tempReward);
+      findedInfo[0].save((err, result) => {
+        //console.log('************************** removeIndex ==> ', removeIndex);
+        res.send({
+          walletAddress: wallet,
+          brcId: id,
+          stakingType: "xODI",
+          rewardType: "BORD",
+          rewardAmount: rewardAmount,
+          inscribeId: inscribeId,
+          removeIndex: removeIndex,
+        });
+        //console.log('rewardAmount ==> ', rewardAmount);
+        // res.send(result);
+        return;
+      });
+    }
+  );
+};
+
+const cbrcUnstake = (id, res, wallet) => {
+  let inscribeId = [];
+
+  console.log('bordUnstaking ==> ', id, wallet)
+  cbrcStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found xODI Staking History" });
+        return;
+      }
+
+      const stakingArr = findedInfo[0].stakingArr;
+
+      let tempReward = 0;
+      let rewardAmount = 0;
+      let removeIndex = -1;
+
+      stakingArr.map((value, index) => {
+        tempReward = calcRewardAtUnstaking(
+          BRC_PRICE,
+          value.stakingAmount,
+          value.claimDate,
+          value.lockTime
+        );
+
+        if (tempReward > 0) {
+          rewardAmount += tempReward;
+        }
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) {
+          removeIndex = index;
+          inscribeId.push(stakingArr[index].inscribeId);
+        }
+        
+      });
+
+      console.log("rewardAmount after calc ==> ", rewardAmount);
+      // rewardAmount = Math.floor(rewardAmount / 10);
+
+      console.log('findedInfo[0].stakingArr.splice =============>')
+      if(removeIndex > -1){
+        if(removeIndex == findedInfo[0].stakingArr.length - 1) {
+          findedInfo[0].stakingArr = [];
+        } else {
+          findedInfo[0].stakingArr.splice(0, removeIndex + 1);
+        }
+      }
+
+      console.log("tempReward before send ==> ", tempReward);
+      findedInfo[0].save((err, result) => {
+        //console.log('************************** removeIndex ==> ', removeIndex);
+        res.send({
+          walletAddress: wallet,
+          brcId: id,
+          stakingType: "xODI",
+          rewardType: "CBRC",
+          rewardAmount: rewardAmount,
+          inscribeId: inscribeId,
+          removeIndex: removeIndex,
+        });
+        //console.log('rewardAmount ==> ', rewardAmount);
+        // res.send(result);
+        return;
+      });
+    }
+  );
+};
+
+//delete DB
+const xodiUnstakeDB = (id, removeIndex, res) => {
+  console.log("id ==> ", id);
+  console.log("removeIndex ==> ", removeIndex);
+
+  brcStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found Brc Staking History" });
+        return;
+      }
+
+      //console.log('findedInfo[0].stakingArr.splice =============>')
+      if (removeIndex > -1) {
+        if (removeIndex == findedInfo[0].stakingArr.length - 1) {
+          findedInfo[0].stakingArr = [];
+        } else {
+          findedInfo[0].stakingArr.splice(0, removeIndex * 1 + 1);
+        }
+      }
+
+      findedInfo[0].save((err, result) => {
+        res.send(true);
+        return;
+      });
+    }
+  );
+};
+
+const bordUnstakeDB = (id, removeIndex, res) => {
+  odiStaking.find(
+    {
+      owner: id,
+    },
+    (err, findedInfo) => {
+      if (findedInfo.length == 0) {
+        res.status(500).send({ message: "Not Found Brc Staking History" });
+        return;
+      }
+
+      //console.log('findedInfo[0].stakingArr.splice =============>')
+      if (removeIndex > -1) {
+        if (removeIndex == findedInfo[0].stakingArr.length - 1) {
+          findedInfo[0].stakingArr = [];
+        } else {
+          findedInfo[0].stakingArr.splice(0, removeIndex * 1 + 1);
+        }
+      }
+
+      findedInfo[0].save((err, result) => {
+        //console.log('************************** removeIndex ==> ', removeIndex);
+        res.send(true);
+        return;
+      });
+    }
+  );
+};
+
+const cbrcUnstakeDB = (id, removeIndex, res) => {
   aStaking.find(
     {
       owner: id,
