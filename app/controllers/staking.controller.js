@@ -1793,6 +1793,11 @@ const brcUnstake = (id, res, wallet) => {
           //console.log(` ${index}th is able to unstaking`);
           // value.claimDate = new Date();
         }
+
+        if((new Date() - new Date(value.stakeDate)) / 1000 / 3600 / 24 > value.lockTime) {
+          removeIndex = index;
+          escrowId.push(stakingArr[index].escrowId);
+        }
       });
 
       console.log("rewardAmount after calc ==> ", rewardAmount);
